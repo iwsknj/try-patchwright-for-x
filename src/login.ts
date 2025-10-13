@@ -1,38 +1,17 @@
 import "dotenv/config";
-import { chromium } from "patchright";
 import * as fs from "fs";
 import { generateOneTimePassword } from "./util/2fa";
+import {
+  humanType,
+  humanClick,
+  humanMouseMove,
+  initializeBrowser,
+} from "./util/playwright";
 
 async function main() {
-  if (
-    !process.env.PROXY_SERVER ||
-    !process.env.PROXY_USERNAME ||
-    !process.env.PROXY_PASSWORD
-  ) {
-    throw new Error("PROXY_SERVER, PROXY_USERNAME, PROXY_PASSWORD is not set");
-  }
-
-  const context = await chromium.launchPersistentContext("./tmp", {
-    channel: "chrome",
-    headless: false,
-    viewport: null,
-    args: [
-      "--blink-settings=imagesEnabled=false",
-      "--disable-remote-fonts",
-      "--disable-blink-features=AutomationControlled",
-    ],
-    // プロキシ設定
-    proxy: {
-      server: process.env.PROXY_SERVER || "", // プロキシサーバーのURL
-      username: process.env.PROXY_USERNAME || "", // プロキシ認証のユーザー名（オプション）
-      password: process.env.PROXY_PASSWORD || "", // プロキシ認証のパスワード（オプション）
-    },
-  });
+  const { browser, context } = await initializeBrowser();
 
   try {
-    // Cookieクリア
-    await context.clearCookies();
-
     const page = await context.newPage();
 
     console.log("X.comトップにアクセス中...");
@@ -68,10 +47,8 @@ async function main() {
     await page.waitForTimeout(3000);
 
     // 人間らしい動作：ページを少し見回す
-    await page.mouse.move(100, 100);
-    await page.waitForTimeout(500 + Math.random() * 500);
-    await page.mouse.move(300, 200);
-    await page.waitForTimeout(300 + Math.random() * 300);
+    await humanMouseMove(page, 100, 100);
+    await humanMouseMove(page, 300, 200, 300);
 
     // トップから「ログイン」ボタンをクリックしてログインフローへ
     console.log("トップのログインボタンをクリック中...");
@@ -82,13 +59,8 @@ async function main() {
       }
     );
 
-    // ボタンにマウスを移動してからクリック
-    const loginBox = await topLoginLink.boundingBox();
-    if (loginBox) {
-      await page.mouse.move(loginBox.x + 50, loginBox.y + 10);
-      await page.waitForTimeout(200 + Math.random() * 200);
-    }
-    await topLoginLink.click();
+    // 人間らしいクリック
+    await humanClick(page, topLoginLink, { preDelay: 200, postDelay: 200 });
 
     // 遷移完了待ち
     await page.waitForLoadState("networkidle");
@@ -99,15 +71,12 @@ async function main() {
       timeout: 5000,
     });
 
-    // フォーカスを当ててから自然なタイピング
-    await usenameInput.click();
-    await page.waitForTimeout(500 + Math.random() * 500); // 人間らしい待機時間
-
-    await usenameInput.type(process.env.X_ACCOUNT_USERNAME || "", {
+    // 人間らしいタイピング
+    await humanType(page, usenameInput, process.env.X_ACCOUNT_EMAIL || "", {
       delay: 100,
-    }); // 自然なタイピング速度
-
-    await page.waitForTimeout(800 + Math.random() * 400); // 入力後の確認時間
+      preDelay: 500,
+      postDelay: 800,
+    });
 
     // 「次へ」ボタンをクリック
     console.log("「次へ」ボタンをクリック中...");
@@ -116,13 +85,24 @@ async function main() {
       { timeout: 5000 }
     );
 
-    // ボタンにマウスを移動してからクリック
-    const nextBox = await nextButton.boundingBox();
-    if (nextBox) {
-      await page.mouse.move(nextBox.x + 30, nextBox.y + 10);
-      await page.waitForTimeout(300 + Math.random() * 200);
+    // 人間らしいクリック
+    await humanClick(page, nextButton, { preDelay: 300, postDelay: 200 });
+
+    await page.waitForTimeout(2000);
+
+    const errorMessage = page.getByText(
+      "Could not log you in now. Please try again later"
+    );
+    const isErrorVisible = await errorMessage.isVisible();
+    if (isErrorVisible) {
+      console.error(
+        "ログインエラーが発生しました: Could not log you in now. Please try again later"
+      );
+      if (process.env.APP_ENV === "production") {
+        await context.close();
+      }
+      return;
     }
-    await nextButton.click();
 
     // パスワード入力フィールドが表示されるまで待機
     await page.waitForTimeout(2000);
@@ -133,13 +113,12 @@ async function main() {
       timeout: 10000,
     });
 
-    // フォーカスを当ててから自然なタイピング
-    await passwordInput.click();
-    await page.waitForTimeout(300 + Math.random() * 300); // 人間らしい待機時間
-
-    await passwordInput.type(process.env.X_ACCOUNT_PASSWORD || "", {
+    // 人間らしいタイピング（パスワードは少し遅めに）
+    await humanType(page, passwordInput, process.env.X_ACCOUNT_PASSWORD || "", {
       delay: 120,
-    }); // パスワードは少し遅めに
+      preDelay: 300,
+      postDelay: 600,
+    });
 
     // ログインボタンをクリック
     console.log("ログインボタンをクリック中...");
@@ -148,13 +127,8 @@ async function main() {
       { timeout: 5000 }
     );
 
-    // ボタンにマウスを移動してからクリック
-    const loginBtnBox = await loginButton.boundingBox();
-    if (loginBtnBox) {
-      await page.mouse.move(loginBtnBox.x + 40, loginBtnBox.y + 15);
-      await page.waitForTimeout(400 + Math.random() * 300);
-    }
-    await loginButton.click();
+    // 人間らしいクリック
+    await humanClick(page, loginButton, { preDelay: 400, postDelay: 300 });
 
     // 2FA(TOTP) 入力が求められる場合に対応
     try {
@@ -170,24 +144,20 @@ async function main() {
 
       const otp = generateOneTimePassword(secret);
 
-      // フォーカスを当ててから自然なタイピング
-      await otpInput.click();
-      await page.waitForTimeout(200 + Math.random() * 200);
-
-      await otpInput.type(otp, { delay: 150 }); // 2FAコードは慎重に入力
+      // 人間らしいタイピング（2FAコードは慎重に入力）
+      await humanType(page, otpInput, otp, {
+        delay: 150,
+        preDelay: 200,
+        postDelay: 400,
+      });
 
       const otpNextButton = await page.waitForSelector(
         'button[data-testid="ocfEnterTextNextButton"]',
         { timeout: 10000 }
       );
 
-      // ボタンにマウスを移動してからクリック
-      const otpBox = await otpNextButton.boundingBox();
-      if (otpBox) {
-        await page.mouse.move(otpBox.x + 35, otpBox.y + 12);
-        await page.waitForTimeout(300 + Math.random() * 200);
-      }
-      await otpNextButton.click();
+      // 人間らしいクリック
+      await humanClick(page, otpNextButton, { preDelay: 300, postDelay: 200 });
 
       await page.waitForTimeout(1000);
     } catch {
@@ -217,6 +187,9 @@ async function main() {
   } finally {
     if (context && process.env.APP_ENV === "production") {
       await context.close();
+    }
+    if (browser && process.env.APP_ENV === "production") {
+      await browser.close();
     }
   }
 }
