@@ -17,31 +17,31 @@ async function main() {
     console.log("X.comトップにアクセス中...");
     await page.goto("https://x.com/", { waitUntil: "networkidle" });
 
-    // 同一タブ上で x.com のストレージをクリア（プロキシ認証エラー回避のため）
-    try {
-      await page.evaluate(async () => {
-        try {
-          localStorage.clear();
-        } catch {}
-        try {
-          sessionStorage.clear();
-        } catch {}
-        try {
-          // Cache Storage をクリア
-          // @ts-ignore
-          if (typeof caches !== "undefined" && caches?.keys) {
-            // @ts-ignore
-            const keys = await caches.keys();
-            // @ts-ignore
-            await Promise.all(keys.map((k: string) => caches.delete(k)));
-          }
-        } catch {}
-      });
-      // ストレージクリア後にページを再読込
-      await page.reload({ waitUntil: "networkidle" });
-    } catch {
-      // クリア失敗時は続行
-    }
+    // // 同一タブ上で x.com のストレージをクリア（プロキシ認証エラー回避のため）
+    // try {
+    //   await page.evaluate(async () => {
+    //     try {
+    //       localStorage.clear();
+    //     } catch {}
+    //     try {
+    //       sessionStorage.clear();
+    //     } catch {}
+    //     try {
+    //       // Cache Storage をクリア
+    //       // @ts-ignore
+    //       if (typeof caches !== "undefined" && caches?.keys) {
+    //         // @ts-ignore
+    //         const keys = await caches.keys();
+    //         // @ts-ignore
+    //         await Promise.all(keys.map((k: string) => caches.delete(k)));
+    //       }
+    //     } catch {}
+    //   });
+    //   // ストレージクリア後にページを再読込
+    //   await page.reload({ waitUntil: "networkidle" });
+    // } catch {
+    //   // クリア失敗時は続行
+    // }
 
     // ページが完全に読み込まれるまで待機
     await page.waitForTimeout(3000);
