@@ -75,7 +75,7 @@ export async function initializeBrowser(): Promise<{
     channel: "chrome",
     headless: false,
     args: [
-      "--blink-settings=imagesEnabled=false",
+      // "--blink-settings=imagesEnabled=false",
       "--disable-remote-fonts",
       "--disable-blink-features=AutomationControlled",
       "--no-sandbox",
